@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VN Research - Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 1.75rem; margin-bottom: 20px; color: #38bdf8; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .card h3 {
+      font-size: 0.875rem;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+      color: #f1f5f9;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    th {
+      text-align: left;
+      padding: 10px 8px;
+      color: #94a3b8;
+      font-weight: 600;
+      border-bottom: 1px solid #334155;
+    }
+    td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #334155;
+      color: #cbd5e1;
+    }
+    tr:hover td { background: #33415533; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #0ea5e9;
+      color: white;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .controls select, .controls input {
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .error {
+      color: #f87171;
+      background: #7f1d1d33;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .loading {
+      color: #94a3b8;
+      text-align: center;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📈 VN Research Dashboard</h1>
+    <div id="error" class="error" style="display:none"></div>
+    <div id="loading" class="loading">Đang tải dữ liệu thị trường...</div>
+
+    <div id="app" style="display:none">
+      <div class="grid">
+        <div class="card">
+          <h3>VN30 Symbols</h3>
+          <div class="value" id="vn30-count">-</div>
+        </div>
+        <div class="card">
+          <h3>HOSE Symbols</h3>
+          <div class="value" id="hose-count">-</div>
+        </div>
+        <div class="card">
+          <h3>HNX Symbols</h3>
+          <div class="value" id="hnx-count">-</div>
+        </div>
+        <div class="card">
+          <h3>Data Source</h3>
+          <div class="value" style="font-size:1.25rem">VCI</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📋 Danh mục VN30</h2>
+        <div class="controls">
+          <select id="group-select">
+            <option value="VN30">VN30</option>
+            <option value="VNALL">VNALL</option>
+            <option value="HNX30">HNX30</option>
+          </select>
+          <button onclick="loadGroup()" class="badge" style="cursor:pointer; border:none;">Tải</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Tên công ty</th><th>Sàn</th></tr>
+            </thead>
+            <tbody id="group-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>🔍 Tra cứu mã CK</h2>
+        <div class="controls">
+          <input type="text" id="symbol-input" placeholder="Nhập mã CK, ví dụ VCB" style="text-transform:uppercase;">
+          <button onclick="lookupSymbol()" class="badge" style="cursor:pointer; border:none;">Tra cứu</button>
+        </div>
+        <div id="symbol-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>
+    const API_BASE = window.location.origin;
+    let priceChart = null;
+    const SIGNAL_COLORS = {
+      breakout: '#22c55e',
+      breakdown: '#ef4444',
+      uptrend: '#38bdf8',
+      downtrend: '#f97316',
+      sideway: '#a3a3a3'
+    };
+
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = 'Lỗi: ' + msg;
+      el.style.display = 'block';
+    }
+
+    function badge(text, color) {
+      return `<span style="display:inline-block;padding:2px 10px;border-radius:9999px;font-size:.75rem;font-weight:600;background:${color};color:white;">${text}</span>`;
+    }
+
+    async function api(path) {
+      const res = await fetch(`${API_BASE}${path}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return res.json();
+    }
+
+    async function loadGroup() {
+      const group = document.getElementById('group-select').value;
+      const tbody = document.getElementById('group-table');
+      tbody.innerHTML = '<tr><td colspan="3" style="color:#94a3b8; text-align:center;">Đang tải...</td></tr>';
+      try {
+        const data = await api(`/api/symbols/group/${group}`);
+        const rows = (data.data || []).map(item => `
+          <tr>
+            <td><span class="badge">${item.symbol}</span></td>
+            <td>${item.organ_name || item.name || '-'}</td>
+            <td style="color:#94a3b8">${item.exchange || '-'}</td>
+          </tr>
+        `).join('');
+        tbody.innerHTML = rows || '<tr><td colspan="3" style="color:#94a3b8; text-align:center;">Không có dữ liệu</td></tr>';
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="3" class="error">${e.message}</td></tr>`;
+        showError(e.message);
+      }
+    }
+
+    async function loadCounts() {
+      try {
+        const [vn30, hose, hnx] = await Promise.all([
+          api('/api/symbols/group/VN30'),
+          api('/api/symbols/exchange/HOSE'),
+          api('/api/symbols/exchange/HNX')
+        ]);
+        document.getElementById('vn30-count').textContent = (vn30.data || []).length;
+        document.getElementById('hose-count').textContent = (hose.data || []).length;
+        document.getElementById('hnx-count').textContent = (hnx.data || []).length;
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function lookupSymbol() {
+      const input = document.getElementById('symbol-input');
+      const symbol = input.value.trim().toUpperCase();
+      const result = document.getElementById('symbol-result');
+      if (!symbol) return;
+      result.innerHTML = '<div style="color:#94a3b8; padding:10px;">Đang tra cứu...</div>';
+      try {
+        const [overview, historyRes, ind] = await Promise.all([
+          api(`/api/stock/${symbol}/overview`).catch(() => ({data: null})),
+          api(`/api/stock/${symbol}/history?start=2025-01-01&end=2025-12-31`).catch(() => ({data: []})),
+          api(`/api/stock/${symbol}/indicators?start=2025-01-01&end=2025-12-31`).catch(() => ({summary: {}, history: []}))
+        ]);
+        const info = overview.data && overview.data[0];
+        const rows = (historyRes.data || []).slice(-10).reverse().map(row => `
+          <tr>
+            <td>${row.time || row.date || '-'}</td>
+            <td>${row.open ?? '-'}</td>
+            <td>${row.high ?? '-'}</td>
+            <td>${row.low ?? '-'}</td>
+            <td style="color:#38bdf8; font-weight:600;">${row.close ?? '-'}</td>
+            <td>${row.volume ?? '-'}</td>
+          </tr>
+        `).join('');
+
+        let html = '';
+        if (info) {
+          html += `
+            <div class="grid" style="margin-top:12px; margin-bottom:12px;">
+              <div class="card"><h3>Giá hiện tại</h3><div class="value">${info.current_price ?? '-'}</div></div>
+              <div class="card"><h3>Vốn hóa</h3><div class="value">${(info.market_cap || 0).toLocaleString('vi-VN')}</div></div>
+              <div class="card"><h3>Khuyến nghị</h3><div class="value" style="font-size:1.1rem;">${info.rating || '-'}</div></div>
+              <div class="card"><h3>Target price</h3><div class="value">${info.target_price ?? '-'}</div></div>
+            </div>
+          `;
+        }
+
+        const summary = ind.summary || {};
+        const latest = summary.latest || {};
+        const level = latest.level_signal || 'neutral';
+        const levelColor = SIGNAL_COLORS[level] || '#a3a3a3';
+        html += `
+          <div class="section" style="margin-top:16px;">
+            <h2>📊 Chỉ báo kỹ thuật</h2>
+            <div class="grid" style="margin-top:16px;">
+              <div class="card">
+                <h3>Xu hướng</h3>
+                <div class="value" style="font-size:1.1rem">
+                  ${level ? badge(level.toUpperCase(), SIGNAL_COLORS[level] || '#a3a3a3') : '-'}
+                </div>
+              </div>
+              <div class="card"><h3>Hỗ trợ / Kháng cự</h3><div class="value" style="font-size:1.1rem">${summary.support ?? '-'} / ${summary.resistance ?? '-'}</div></div>
+              <div class="card"><h3>RSI(14)</h3><div class="value">${latest.rsi ?? '-'}</div></div>
+              <div class="card"><h3>MFI(14)</h3><div class="value">${latest.mfi ?? '-'}</div></div>
+              <div class="card"><h3>MACD / Tín hiệu</h3><div class="value" style="font-size:1.1rem">${latest.macd ?? '-'} / ${latest.signal ?? '-'}</div></div>
+              <div class="card"><h3>Volume ratio</h3><div class="value">${latest.volume_ratio ?? '-'}</div></div>
+            </div>
+            <div class="grid" style="margin-top:12px;">
+              <div class="card">
+                <h3>Dòng tiền</h3>
+                <div class="value" style="font-size:1.1rem">
+                  ${badge((summary.money_flow?.obv_trend || 'neutral').toUpperCase(), summary.money_flow?.obv_trend === 'inflow' ? '#22c55e' : '#ef4444')}
+                </div>
+                <div style="color:#94a3b8;font-size:.85rem;margin-top:6px;">MFI: ${badge((summary.money_flow?.mfi_signal || 'neutral'), '#334155')} | Volume: ${summary.money_flow?.volume_signal || '-'}</div>
+              </div>
+              <div class="card"><h3>Phân kỳ RSI</h3><div class="value" style="font-size:.9rem">${[(summary.divergence?.regular_bullish ? 'Bullish ' : ''), (summary.divergence?.regular_bearish ? 'Bearish ' : ''), ((summary.divergence?.regular_bullish || summary.divergence?.regular_bearish) ? '' : 'Không rõ')].join('') || 'Không rõ'}</div></div>
+              <div class="card"><h3>Breakout/Breakdown</h3><div class="value" style="font-size:1.1rem">${latest.breakout ? badge((latest.breakout).toUpperCase(), latest.breakout === 'breakout' ? '#22c55e' : '#ef4444') : '-'}</div></div>
+            </div>
+            <div style="margin-top:16px; max-height:380px;">
+              <canvas id="priceChart"></canvas>
+            </div>
+          </div>
+        `;
+        result.innerHTML = html;
+        renderPriceChart((ind.history || []).reverse(), symbol);
+      } catch (e) {
+        result.innerHTML = `<div class="error">${e.message}</div>`;
+        showError(e.message);
+      }
+    }
+
+    function renderPriceChart(history, symbol) {
+      const ctx = document.getElementById('priceChart');
+      if (!ctx) return;
+      const labels = history.map(x => x.date);
+      const closes = history.map(x => x.close);
+      const ma20 = history.map(x => x.ma20);
+      const ma50 = history.map(x => x.ma50);
+      if (priceChart) priceChart.destroy();
+      priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: `${symbol} Close`, data: closes, borderColor: '#38bdf8', backgroundColor: '#38bdf822', fill: true, tension: 0.2, pointRadius: 1 },
+            { label: 'MA20', data: ma20, borderColor: '#facc15', borderWidth: 1.5, pointRadius: 0, tension: 0.2 },
+            { label: 'MA50', data: ma50, borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, tension: 0.2 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#e2e8f0' } } },
+          scales: {
+            x: { ticks: { color: '#94a3b8', maxTicksLimit: 10 }, grid: { color: '#33415544' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#33415544' } }
+          }
+        }
+      });
+    }
+
+    document.getElementById('symbol-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') lookupSymbol();
+    });
+
+    async function init() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      await loadCounts();
+      await loadGroup();
+    }
+
+    init();
+  </script>
+</body>
+</html>
