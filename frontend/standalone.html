@@ -236,10 +236,18 @@
       if (!symbol) return;
       result.innerHTML = '<div style="color:#94a3b8; padding:10px;">Đang tra cứu...</div>';
       try {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const end = `${yyyy}-${mm}-${dd}`;
+        const past = new Date(now);
+        past.setFullYear(past.getFullYear() - 1);
+        const start = `${past.getFullYear()}-${String(past.getMonth() + 1).padStart(2, '0')}-${String(past.getDate()).padStart(2, '0')}`;
         const [overview, historyRes, ind] = await Promise.all([
           api(`/api/stock/${symbol}/overview`).catch(() => ({data: null})),
-          api(`/api/stock/${symbol}/history?start=2025-01-01&end=2025-12-31`).catch(() => ({data: []})),
-          api(`/api/stock/${symbol}/indicators?start=2025-01-01&end=2025-12-31`).catch(() => ({summary: {}, history: []}))
+          api(`/api/stock/${symbol}/history?start=${start}&end=${end}`).catch(() => ({data: []})),
+          api(`/api/stock/${symbol}/indicators?start=${start}&end=${end}`).catch(() => ({summary: {}, history: []}))
         ]);
         const info = overview.data && overview.data[0];
         const rows = (historyRes.data || []).slice(-10).reverse().map(row => `
