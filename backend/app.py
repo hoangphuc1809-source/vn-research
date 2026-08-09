@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import json
 import os
 import sys
@@ -39,6 +40,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 def safe_call(fn, *args, **kwargs):
     try:
         result = fn(*args, **kwargs)
@@ -53,11 +59,6 @@ def safe_call(fn, *args, **kwargs):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
 @app.get("/api/symbols")
 async def get_symbols(source: str = "VCI"):
     data = safe_call(listing_all_symbols, source=source)
@@ -70,10 +71,24 @@ async def get_symbols_by_group(group: str, source: str = "VCI"):
     return {"data": data}
 
 
+EXCHANGE_ALIASES = {
+    "HOSE": "HSX",
+    "HSX": "HSX",
+    "HNX": "HNX",
+    "UPCOM": "UPCOM",
+}
+
+
 @app.get("/api/symbols/exchange/{exchange}")
 async def get_symbols_by_exchange(exchange: str, source: str = "VCI"):
-    data = safe_call(listing_symbols_by_exchange, exchange=exchange.upper(), source=source)
-    return {"data": data}
+    target = EXCHANGE_ALIASES.get(exchange.upper(), exchange.upper())
+    data = safe_call(listing_symbols_by_exchange, source=source)
+    filtered = [
+        row for row in data
+        if str(row.get("exchange", "")).upper() == target
+        and str(row.get("type", "")).upper() == "STOCK"
+    ]
+    return {"data": filtered}
 
 
 @app.get("/api/industries")
@@ -159,6 +174,11 @@ async def get_cash_flow(symbol: str, period: str = "quarter", source: str = "VCI
 async def get_financial_ratios(symbol: str, period: str = "quarter", source: str = "VCI"):
     data = safe_call(financial_ratio, symbol, period, source)
     return {"data": data}
+
+
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
 
 if __name__ == "__main__":
