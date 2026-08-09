@@ -1,0 +1,14 @@
+[Unit]
+Description=VN Research Backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hoang/vn-research
+Environment="PATH=/home/hoang/vnstock-env/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/hoang/vnstock-env/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8900
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
